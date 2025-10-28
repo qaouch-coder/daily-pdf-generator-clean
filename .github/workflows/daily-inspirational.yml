@@ -1,0 +1,36 @@
+name: Daily Inspirational PDF Auto Upload
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"  # 02:00 UTC daily
+
+jobs:
+  run-puppeteer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Inspirational Puppeteer script
+        run: |
+          echo "🚀 Running Inspirational Puppeteer script (02:00 UTC)..."
+          npm start
+        shell: bash
+
+      - name: Upload logs & debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspirational-artifacts
+          path: |
+            upload-summary-*.txt
+            debug-screenshot.png

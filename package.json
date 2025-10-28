@@ -1,0 +1,11 @@
+{
+  "name": "daily-pdf-generator-clean",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node generate_inspirational.mjs"
+  },
+  "dependencies": {
+    "puppeteer": "^21.3.0"
+  }
+}
