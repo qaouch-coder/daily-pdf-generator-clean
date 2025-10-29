@@ -10,23 +10,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --- Step 1. Checkout repo ---
       - name: Checkout
         uses: actions/checkout@v4
 
+      # --- Step 2. Setup Node.js ---
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      # --- Step 3. Install latest Puppeteer and dependencies ---
+      - name: Install latest Puppeteer and deps
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install puppeteer@latest --no-audit --no-fund --force
+          echo "✅ Puppeteer version installed:"
+          npx puppeteer --version || echo "Version check done"
 
+      # --- Step 4. Run main Puppeteer automation script ---
       - name: Run Daily Puppeteer Script
         shell: bash
         run: |
           echo "🚀 Running Daily Puppeteer Script (02:00 UTC)..."
           node generate_daily_pdfs.mjs
 
+      # --- Step 5. Upload logs & screenshots for debugging ---
       - name: Upload artifacts (logs/screenshots)
         if: always()
         uses: actions/upload-artifact@v4
