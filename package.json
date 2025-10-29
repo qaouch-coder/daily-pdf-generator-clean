@@ -1,11 +1,7 @@
 {
-  "name": "daily-pdf-generator-clean",
-  "version": "1.0.0",
+  "name": "daily-pdf-generator",
+  "version": "3.0.0",
   "type": "module",
-  "scripts": {
-    "start": "node generate_inspirational.mjs"
-  },
-  "dependencies": {
-    "puppeteer": "^21.3.0"
-  }
+  "scripts": { "start": "node generate_daily_pdfs.mjs" },
+  "dependencies": { "puppeteer": "^21.3.0" }
 }
