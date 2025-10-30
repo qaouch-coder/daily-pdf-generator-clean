@@ -1,39 +1,42 @@
 @echo off
-title 🧠 GitHub Sync - Daily WordSearch Project
-echo.
-echo ===============================================
-echo   WordSearchToPrint.com GitHub Sync Utility
-echo   Directory: %cd%
-echo ===============================================
-echo.
+title 🔄 Sync GitHub + Fix Puppeteer (Safe Mode)
+color 0a
 
-REM Abort any half-finished merges or rebases safely
-git merge --abort >nul 2>&1
-git rebase --abort >nul 2>&1
-
-REM Fetch latest remote updates
-echo 🌀 Fetching latest changes from GitHub...
-git fetch origin main
-
-REM Rebase local changes cleanly
-echo 🔄 Rebasing local commits...
-git pull --rebase origin main
-
-REM Stage all changed files
-echo 📦 Staging changes...
-git add .
-
-REM Commit with timestamped message
-setlocal enabledelayedexpansion
-for /f "tokens=1-3 delims=/: " %%a in ("%date%") do (
-  set TODAY=%%a-%%b-%%c
-)
-git commit -m "Auto-sync on !TODAY!"
-
-REM Push everything to GitHub
-echo 🚀 Pushing to origin/main...
-git push -u origin main
+echo ======================================================
+echo 🧹 Step 1/4: Cleaning old Puppeteer and cache...
+echo ======================================================
+call npm uninstall puppeteer puppeteer-core
+call rmdir /s /q node_modules
+call del /f /q package-lock.json
+call npm cache clean --force
 
 echo.
-echo ✅ All changes synced successfully!
+echo ======================================================
+echo 📦 Step 2/4: Installing full Puppeteer (latest)...
+echo ======================================================
+call npm install puppeteer@latest --save
+
+echo.
+echo ======================================================
+echo 🔍 Step 3/4: Checking Puppeteer version...
+echo ======================================================
+call npx puppeteer --version
+
+echo.
+echo ======================================================
+echo 🧾 Step 4/4: Syncing changes to GitHub...
+echo ======================================================
+call git add .
+echo.
+call git status -s
+echo.
+set /p msg="💬 Enter commit message (or press ENTER for default): "
+if "%msg%"=="" set msg=Auto-sync (Updated Puppeteer + project changes)
+call git commit -m "%msg%"
+call git push -u origin main
+
+echo.
+echo ======================================================
+echo ✅ Done! Everything is synced successfully.
+echo ======================================================
 pause
