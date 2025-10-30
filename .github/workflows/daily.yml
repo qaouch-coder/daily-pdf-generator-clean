@@ -10,33 +10,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # --- Step 1. Checkout repo ---
       - name: Checkout
         uses: actions/checkout@v4
 
-      # --- Step 2. Setup Node.js ---
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # --- Step 3. Install latest Puppeteer and dependencies ---
-      - name: Install latest Puppeteer and deps
+      - name: 🧹 Clean and install Puppeteer cleanly
         run: |
-          echo "📦 Installing dependencies..."
-          npm install puppeteer@latest --no-audit --no-fund --force
-          echo "✅ Puppeteer version installed:"
-          npx puppeteer --version || echo "Version check done"
+          echo "🧹 Cleaning environment..."
+          rm -rf node_modules package-lock.json ~/.cache/puppeteer
+          npm cache clean --force
+          echo "📦 Installing Puppeteer (full version)..."
+          npm install puppeteer@latest --save
 
-      # --- Step 4. Run main Puppeteer automation script ---
-      - name: Run Daily Puppeteer Script
-        shell: bash
+      - name: 🧱 Verify Puppeteer installation
+        run: |
+          node -e "console.log('✅ Puppeteer version:', require('puppeteer/package.json').version)"
+
+      - name: 🧭 Ensure Chromium installed (fallback)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser || echo "⚠️ Chromium fallback not needed"
+
+      - name: 🚀 Run Daily Puppeteer Script
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
         run: |
           echo "🚀 Running Daily Puppeteer Script (02:00 UTC)..."
           node generate_daily_pdfs.mjs
 
-      # --- Step 5. Upload logs & screenshots for debugging ---
-      - name: Upload artifacts (logs/screenshots)
+      - name: 📂 Upload artifacts (logs/screenshots)
         if: always()
         uses: actions/upload-artifact@v4
         with:
