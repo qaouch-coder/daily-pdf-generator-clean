@@ -3,14 +3,15 @@ name: Daily WordSearch Auto Upload + Conversion
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 2 * * *"  # Runs nightly at 02:00 UTC
+    - cron: "0 2 * * *" # Runs nightly at 02:00 UTC
 
 jobs:
   run-puppeteer:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -18,35 +19,41 @@ jobs:
         with:
           node-version: 20
 
-      - name: 🧹 Clean and install Puppeteer cleanly
+      - name: Install dependencies
         run: |
-          echo "🧹 Cleaning environment..."
-          rm -rf node_modules package-lock.json ~/.cache/puppeteer
-          npm cache clean --force
-          echo "📦 Installing Puppeteer (full version)..."
-          npm install puppeteer@latest --save
+          echo "📦 Installing dependencies..."
+          npm install --no-audit --no-fund
 
-      - name: 🧱 Verify Puppeteer installation
-        run: |
-          node -e "console.log('✅ Puppeteer version:', require('puppeteer/package.json').version)"
-
-      - name: 🧭 Ensure Chromium installed (fallback)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser || echo "⚠️ Chromium fallback not needed"
-
-      - name: 🚀 Run Daily Puppeteer Script
-        env:
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      - name: Run Daily Puppeteer Script
+        id: run_puppeteer
+        shell: bash
         run: |
           echo "🚀 Running Daily Puppeteer Script (02:00 UTC)..."
-          node generate_daily_pdfs.mjs
+          set +e
+          node generate_daily_pdfs.mjs > puppeteer-output.log 2>&1
+          exit_code=$?
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          echo "------ Puppeteer Log (Last 20 lines) ------"
+          tail -n 20 puppeteer-output.log
+          exit $exit_code
 
-      - name: 📂 Upload artifacts (logs/screenshots)
+      - name: Check for Fallback Trigger
+        if: failure()
+        run: |
+          echo "⚠️ Puppeteer job failed — triggering local fallback on your server..."
+          RESPONSE=$(curl -s "https://wordsearchtoprint.com/run-puppeteer.php?token=Ygmp146rMNYid8349flmzART" || true)
+          echo "🌐 Fallback response:"
+          echo "$RESPONSE"
+          echo "$RESPONSE" > fallback-response.txt
+          echo "✅ Fallback trigger executed — local Hostinger Puppeteer should handle conversions."
+
+      - name: Upload artifacts (logs & summaries)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: daily-pdf-artifacts
           path: |
+            puppeteer-output.log
+            fallback-response.txt
             upload-summary-*.txt
             debug-*.png
