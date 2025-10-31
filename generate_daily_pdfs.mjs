@@ -1,27 +1,25 @@
-// ========================================================
-// Daily PDF Generator & Converter Automation
-// Topics: Inspirational, Relaxing, History
-// ========================================================
+// =============================================================
+//  generate_daily_pdfs.mjs
+//  Robust daily automation: 3 topics (Inspirational, Relaxing, History)
+//  Uploads PDFs → waits for server → auto-triggers converter
+//  Built for GitHub Actions reliability (Hostinger-safe)
+// =============================================================
 
 import puppeteer from "puppeteer";
 import fs from "fs";
 import path from "path";
-import os from "os";
 
 const BASE_URL = "https://wordsearchtoprint.com/puzzles";
 const CONVERTER_URL = "https://wordsearchtoprint.com/auto_pdf_to_jpg.php";
-const LOG_UPLOAD_URL = "https://wordsearchtoprint.com/auto_log_upload.php";
 const TOKEN = "Ygmp146rMNYid8349flmzART";
 
 const topics = [
-  { topic: "inspirational", slug: "Daily-Inspirational-Large-Print-Word-Search-test" },
-  { topic: "relaxing", slug: "Daily-Relaxing-Large-Print-Word-Search-test" },
-  { topic: "history", slug: "Daily-History-Themed-Large-Print-Word-Search-test" }
+  { key: "inspirational", url: `${BASE_URL}/Daily-Inspirational-Large-Print-Word-Search-test.html` },
+  { key: "relaxing", url: `${BASE_URL}/Daily-Relaxing-Large-Print-Word-Search-test.html` },
+  { key: "history", url: `${BASE_URL}/Daily-History-Themed-Large-Print-Word-Search-test.html` },
 ];
 
 const today = new Date().toISOString().split("T")[0];
-const [y, m, d] = today.split("-");
-const altDate = `${m}_${d}_${y}`;
 const logFile = path.join(process.cwd(), `upload-summary-${today}.txt`);
 
 function log(msg) {
@@ -30,96 +28,170 @@ function log(msg) {
   console.log(msg);
 }
 
-async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
-async function callConverter(topic, filename, maxRetries = 3) {
-  const url = `${CONVERTER_URL}?token=${TOKEN}&topic=${topic}&filename=${encodeURIComponent(filename)}`;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    log(`⚙️ [${topic}] Converter attempt ${attempt}/${maxRetries} -> ${url}`);
+// --- 1️⃣ Connectivity check before Puppeteer runs ---
+async function healthCheck() {
+  try {
+    const res = await fetch("https://wordsearchtoprint.com/healthcheck.php");
+    if (!res.ok) throw new Error("Site unreachable");
+    log("✅ Health check passed: site reachable");
+    return true;
+  } catch (err) {
+    log(`❌ Health check failed: ${err.message}`);
+    return false;
+  }
+}
+
+// --- 2️⃣ Safe navigation with retries ---
+async function safeGoto(page, url, topic, timeout = 120000) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      log(`🌐 [${topic}] Attempt ${attempt}: loading ${url}`);
+      await page.goto(url, { waitUntil: "networkidle2", timeout });
+      log(`✅ [${topic}] Page loaded successfully`);
+      return true;
+    } catch (err) {
+      log(`⚠️ [${topic}] Attempt ${attempt} failed: ${err.message}`);
+      if (attempt < 3) {
+        log("⏳ Waiting 15s before retry...");
+        await sleep(15000);
+      }
+    }
+  }
+  log(`❌ [${topic}] Could not load ${url} after 3 attempts`);
+  return false;
+}
+
+// --- 3️⃣ Call PHP converter ---
+async function callConverter(topic, filename, tries = 4, waitMs = 8000) {
+  const q = `?token=${encodeURIComponent(TOKEN)}&topic=${encodeURIComponent(topic)}&filename=${encodeURIComponent(filename)}`;
+  const url = `${CONVERTER_URL}${q}`;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      log(`🔄 Converter attempt ${i}/${tries}: ${url}`);
       const res = await fetch(url);
       const raw = await res.text();
-      log(`📨 [${topic}] HTTP ${res.status}: ${raw.slice(0, 800)}`);
-      let json;
-      try { json = JSON.parse(raw); } catch {}
-      if (res.ok && json?.status === "ok") {
-        log(`🎉 [${topic}] Conversion success`);
+      log(`📡 Converter HTTP ${res.status}: ${raw.slice(0, 300)}`);
+      const json = JSON.parse(raw);
+      if (json.status === "ok") {
+        log(`🎉 [${topic}] Conversion success: ${json.pinterest_images.join(", ")}`);
         return true;
       }
     } catch (err) {
       log(`⚠️ [${topic}] Converter error: ${err.message}`);
     }
-    if (attempt < maxRetries) await sleep(20000);
+    if (i < tries) {
+      log(`⏳ Waiting ${waitMs / 1000}s before retry...`);
+      await sleep(waitMs);
+    }
   }
+  log(`❌ [${topic}] Conversion failed after ${tries} attempts`);
   return false;
 }
 
-async function runTopic(browser, { topic, slug }) {
-  const url = `${BASE_URL}/${slug}.html`;
-  const filename = `todays-${topic}-large-print-word-search-${altDate}.pdf`;
+// --- 4️⃣ Poll for PDF existence ---
+async function pollForPdf(topic) {
+  const pdfBase = `https://wordsearchtoprint.com/auto-pdfs/${topic}/`;
+  const todayStr = today.replace(/-/g, "_");
+  const filenameCandidates = [
+    `todays-${topic}-large-print-word-search-${todayStr}.pdf`,
+    `todays-${topic}-large-print-word-search-${today}.pdf`,
+    `daily-${topic}-${today}.pdf`,
+  ];
 
-  log(`\n🚀 ${topic.toUpperCase()} — Loading: ${url}`);
+  async function listFiles() {
+    try {
+      const res = await fetch(pdfBase);
+      const html = await res.text();
+      const matches = [...html.matchAll(/href="([^"]+\.pdf)"/gi)].map(m => m[1]);
+      return matches;
+    } catch {
+      return [];
+    }
+  }
+
+  log(`⏳ Polling for ${topic} PDF (up to 3 minutes)...`);
+  for (let i = 0; i < 36; i++) { // 36 × 5s = 180s
+    const files = await listFiles();
+    const match = files.find(f => filenameCandidates.some(c => f.toLowerCase().includes(c.toLowerCase())));
+    if (match) {
+      log(`✅ [${topic}] Found PDF: ${pdfBase + match}`);
+      return match;
+    }
+    log(`🧾 [${topic}] [${i}] Files seen: ${files.join(", ")}`);
+    await sleep(5000);
+  }
+  log(`❌ [${topic}] PDF not detected after 3 minutes`);
+  return null;
+}
+
+// --- 🧠 MAIN ---
+(async () => {
+  log("🚀 Starting Daily Upload & Conversion (02:00 UTC job)");
+
+  if (!(await healthCheck())) {
+    log("💤 Site unreachable, exiting early");
+    process.exit(1);
+  }
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"]
+  });
+
   const page = await browser.newPage();
+  await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
-    await sleep(12000);
+  for (const { key: topic, url } of topics) {
+    log(`\n🚀 ${topic.toUpperCase()} — Loading: ${url}`);
+    const loaded = await safeGoto(page, url, topic);
+    if (!loaded) {
+      log(`💥 [${topic}] Skipping (couldn't load page)`);
+      continue;
+    }
+
+    log("⏳ Waiting 10s for script initialization...");
+    await sleep(10000);
 
     const btn = await page.$("#pdfBtn");
     if (!btn) {
       log(`❌ [${topic}] #pdfBtn not found`);
-      await page.screenshot({ path: `debug-${topic}.png`, fullPage: true });
-      return;
+      continue;
     }
 
+    log(`🔘 [${topic}] Clicking #pdfBtn to generate & upload PDF`);
     await btn.click();
-    log(`🔘 [${topic}] Clicked #pdfBtn`);
 
-    await sleep(45000);
-    log(`✅ [${topic}] Uploaded PDF (${filename})`);
+    const pdfFile = await pollForPdf(topic);
+    if (!pdfFile) {
+      log(`❌ [${topic}] No PDF found, skipping conversion`);
+      continue;
+    }
 
-    await callConverter(topic, filename, 3);
-  } catch (err) {
-    log(`💥 [${topic}] Error: ${err.message}`);
-  } finally {
-    await page.close();
+    const filename = pdfFile.split("/").pop();
+    log(`⚙️ [${topic}] Triggering converter for ${filename}`);
+    await callConverter(topic, filename);
+
+    log("⏳ Waiting 20s before next topic...");
+    await sleep(20000);
   }
-}
 
-(async () => {
-  log(`🚀 Starting Daily Upload & Conversion (02:00 UTC job)`);
-
-  const tmpDir = path.join(os.tmpdir(), `puppeteer-session-${Date.now()}`);
-  const browser = await puppeteer.launch({
-    headless: true,
-    userDataDir: tmpDir,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-blink-features=AutomationControlled"]
-  });
-
+  await browser.close();
+  log("📤 Uploading daily summary log...");
   try {
-    for (const t of topics) {
-      await runTopic(browser, t);
-      log(`⏳ Waiting 20s before next topic...`);
-      await sleep(20000);
-    }
+    const body = fs.readFileSync(logFile, "utf8");
+    await fetch("https://wordsearchtoprint.com/auto-pdfs/upload-summary.php", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body
+    });
+    log("✅ Summary uploaded successfully");
   } catch (err) {
-    log(`💥 Global error: ${err.message}`);
-  } finally {
-    // Upload log
-    try {
-      const fileData = fs.readFileSync(logFile);
-      const form = new FormData();
-      form.append("token", TOKEN);
-      form.append("file", new Blob([fileData]), path.basename(logFile));
-      log("📤 Uploading daily summary log...");
-      const res = await fetch(LOG_UPLOAD_URL, { method: "POST", body: form });
-      const text = await res.text();
-      log(`🌐 Log upload response: ${text}`);
-    } catch (err) {
-      log(`⚠️ Log upload failed: ${err.message}`);
-    }
-
-    await browser.close();
-    log("🛑 Done — all topics processed.");
+    log(`⚠️ Log upload failed: ${err.message}`);
   }
+
+  log("🛑 Done — all topics processed.");
 })();
