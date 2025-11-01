@@ -1,0 +1,6 @@
+node_modules/
+upload-summary-*.txt
+converter-log.txt
+debug-*.png
+.debug/
+.env

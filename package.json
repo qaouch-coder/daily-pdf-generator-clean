@@ -1,11 +1,11 @@
 {
-  "name": "daily-pdf-generator",
+  "name": "daily-pdf-generator-render",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "start": "node generate_daily_pdfs.mjs"
   },
   "dependencies": {
-    "puppeteer": "^24.3.0"
+    "puppeteer": "^24.27.0"
   }
 }
