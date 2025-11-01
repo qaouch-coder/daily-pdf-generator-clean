@@ -1,13 +1,9 @@
 {
   "name": "daily-pdf-generator",
   "version": "1.0.0",
-  "description": "Puppeteer automation: generate PDFs and trigger server-side converter",
   "type": "module",
   "scripts": {
     "start": "node generate_daily_pdfs.mjs"
-  },
-  "engines": {
-    "node": ">=18"
   },
   "dependencies": {
     "puppeteer": "^24.27.0"

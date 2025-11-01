@@ -3,12 +3,11 @@ name: Daily WordSearch Auto Upload + Conversion
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 2 * * *" # Runs daily at 02:00 UTC
+    - cron: "0 2 * * *"  # Runs nightly at 02:00 UTC
 
 jobs:
   run-puppeteer:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -19,21 +18,20 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Clean install full Puppeteer
         run: |
-          # Install full Puppeteer (node_modules will include Chromium)
-          npm install --no-audit --no-fund
+          echo "🧹 Cleaning node_modules and lockfiles..."
+          rm -rf node_modules package-lock.json
+          echo "📦 Installing full Puppeteer (not core)..."
+          npm install puppeteer@latest --save
 
       - name: Run Daily Puppeteer Script
         shell: bash
-        env:
-          CONVERTER_URL: https://wordsearchtoprint.com/auto_pdf_to_jpg.php
-          CONVERTER_TOKEN: Ygmp146rMNYid8349flmzART
         run: |
           echo "🚀 Running Daily Puppeteer Script (02:00 UTC)..."
           node generate_daily_pdfs.mjs
 
-      - name: Upload artifacts (logs/screenshots)
+      - name: Upload logs & debug files
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -41,4 +39,4 @@ jobs:
           path: |
             upload-summary-*.txt
             debug-*.png
-            converter-log.txt
+            debug.html
