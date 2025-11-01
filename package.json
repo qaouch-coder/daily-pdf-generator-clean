@@ -6,6 +6,6 @@
     "start": "node generate_daily_pdfs.mjs"
   },
   "dependencies": {
-    "puppeteer": "^24.27.0"
+    "puppeteer": "^24.3.0"
   }
 }

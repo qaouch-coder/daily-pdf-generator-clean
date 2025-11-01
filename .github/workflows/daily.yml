@@ -20,10 +20,17 @@ jobs:
 
       - name: Clean install full Puppeteer
         run: |
-          echo "🧹 Cleaning node_modules and lockfiles..."
-          rm -rf node_modules package-lock.json
-          echo "📦 Installing full Puppeteer (not core)..."
+          echo "🧹 Cleaning old installs..."
+          rm -rf node_modules package-lock.json /home/runner/.cache/puppeteer
+          echo "📦 Installing latest Puppeteer..."
           npm install puppeteer@latest --save
+          echo "🧠 Forcing Chromium download..."
+          npx puppeteer browsers install chrome
+
+      - name: Verify Chromium path
+        run: |
+          echo "🔍 Checking installed browsers..."
+          npx puppeteer browsers list
 
       - name: Run Daily Puppeteer Script
         shell: bash
